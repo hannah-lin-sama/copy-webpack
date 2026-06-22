@@ -1741,6 +1741,7 @@ class Server {
   }
 
   /**
+   * 负责设置钩子、创建应用/服务器、配置中间件和处理信号
    * @private
    * @returns {Promise<void>}
    */
@@ -1909,6 +1910,7 @@ class Server {
   }
 
   /**
+   * webpack-dev-server 中监视静态文件变化的工具，用于实现静态资源变更时的自动刷新
    * @private
    * @returns {void}
    */
@@ -1925,6 +1927,7 @@ class Server {
   }
 
   /**
+   * webpack-dev-server 中监视文件变化的工具，用于实现自定义文件变更时的自动刷新
    * @private
    * @returns {void}
    */
@@ -1939,6 +1942,7 @@ class Server {
   }
 
   /**
+   * webpack-dev-server 中配置 Express/Koa 中间件链的核心方法，负责构建完整的请求处理管道
    * @private
    * @returns {void}
    */
@@ -1949,6 +1953,7 @@ class Server {
     let middlewares = [];
 
     // Register setup host header check for security
+    // Host 头验证    
     middlewares.push({
       name: "host-header-check",
       /**
@@ -1974,6 +1979,7 @@ class Server {
     });
 
     // Register setup cross origin request check for security
+    // 跨域请求验证
     middlewares.push({
       name: "cross-origin-header-check",
       /**
@@ -2010,6 +2016,7 @@ class Server {
       /** @type {ServerConfiguration<A, S>} */ (this.options.server).type ===
       "http2";
 
+      // HTTP/2 兼容性修复
     if (isHTTP2) {
       // TODO patch for https://github.com/pillarjs/finalhandler/pull/45, need remove then will be resolved
       middlewares.push({
@@ -2029,6 +2036,7 @@ class Server {
       });
     }
 
+    // Gzip 压缩  
     // compress is placed last and uses unshift so that it will be the first middleware used
     if (this.options.compress && !isHTTP2) {
       const compression = require("compression");
@@ -2036,6 +2044,7 @@ class Server {
       middlewares.push({ name: "compression", middleware: compression() });
     }
 
+    // 自定义响应头   
     if (typeof this.options.headers !== "undefined") {
       middlewares.push({
         name: "set-headers",
@@ -2043,6 +2052,7 @@ class Server {
       });
     }
 
+    // webpack 编译结果
     middlewares.push({
       name: "webpack-dev-middleware",
       middleware: /** @type {MiddlewareHandler} */ (this.middleware),
@@ -2098,6 +2108,7 @@ class Server {
       },
     });
 
+    // 触发重新编译
     middlewares.push({
       name: "webpack-dev-server-invalidate",
       path: "/webpack-dev-server/invalidate",
@@ -2119,6 +2130,7 @@ class Server {
       },
     });
 
+    // 编辑器支持   
     middlewares.push({
       name: "webpack-dev-server-open-editor",
       path: "/webpack-dev-server/open-editor",
@@ -2154,6 +2166,7 @@ class Server {
       },
     });
 
+    // 资产报告页面 
     middlewares.push({
       name: "webpack-dev-server-assets",
       path: "/webpack-dev-server",
@@ -2238,6 +2251,7 @@ class Server {
       },
     });
 
+    //  API 代理   
     if (this.options.proxy) {
       const { createProxyMiddleware } = require("http-proxy-middleware");
 
@@ -2402,6 +2416,7 @@ class Server {
     if (staticOptions.length > 0) {
       for (const staticOption of staticOptions) {
         for (const publicPath of staticOption.publicPath) {
+          //  静态文件服务  
           middlewares.push({
             name: "express-static",
             path: publicPath,
@@ -2435,6 +2450,7 @@ class Server {
         );
       }
 
+      // SPA 路由支持 
       // Fall back to /index.html if nothing else matches.
       middlewares.push({
         name: "connect-history-api-fallback",
@@ -2473,6 +2489,7 @@ class Server {
       for (const staticOption of staticOptions) {
         for (const publicPath of staticOption.publicPath) {
           if (staticOption.serveIndex) {
+            // 目录浏览  
             middlewares.push({
               name: "serve-index",
               path: publicPath,
@@ -2505,6 +2522,7 @@ class Server {
     middlewares.push({
       name: "options-middleware",
       /**
+       *  OPTIONS 请求处理  
        * @param {Request} req
        * @param {Response} res
        * @param {NextFunction} next
@@ -2576,6 +2594,7 @@ class Server {
   }
 
   /**
+   * webpack-dev-server 中创建 HTTP/HTTPS 服务器
    * @private
    * @returns {Promise<void>}
    */
@@ -2584,6 +2603,7 @@ class Server {
       /** @type {ServerConfiguration<A, S>} */
       (this.options.server);
 
+      // 自定义函数类型 → 直接调用函数  
     if (typeof type === "function") {
       /** @type {S | undefined}*/
       this.server = await type(
@@ -2599,6 +2619,7 @@ class Server {
       /** @type {S | undefined}*/
       this.server =
         type === "http2"
+        // "http2" → createSecureServer()    
           ? serverType.createSecureServer(
               { ...options, allowHTTP1: true },
               this.app,
@@ -2606,11 +2627,13 @@ class Server {
           : serverType.createServer(options, this.app);
     }
 
+    // 检测 TLS 状态
     this.isTlsServer =
       typeof (
         /** @type {import("tls").Server} */ (this.server).setSecureContext
       ) !== "undefined";
 
+      // 监听 connection 事件
     /** @type {S} */
     (this.server).on(
       "connection",
@@ -2641,13 +2664,17 @@ class Server {
   }
 
   /**
+   * webpack-dev-server 中创建 WebSocket 服务器的核心方法，用于实现热模块替换（HMR）和实时重载功能
    * @private
    * @returns {void}
    */
   createWebSocketServer() {
+    // 获取 WebSocket 服务器实现类
+    // 创建 WebSocket 服务器实例  
     /** @type {WebSocketServerImplementation | undefined | null} */
     this.webSocketServer = new (this.getServerTransport())(this);
 
+    // 监听 connection 事件
     /** @type {WebSocketServerImplementation} */
     (this.webSocketServer).implementation.on(
       "connection",
@@ -2675,11 +2702,12 @@ class Server {
           );
         }
 
+        // 安全目的：防止 DNS 重绑定攻击和跨站请求
         if (
           !headers ||
-          !this.isValidHost(headers, "host") ||
-          !this.isValidHost(headers, "origin") ||
-          !this.isSameOrigin(headers)
+          !this.isValidHost(headers, "host") || // 验证 Host 头合法性
+          !this.isValidHost(headers, "origin") || // 验证 Origin 头合法性
+          !this.isSameOrigin(headers) // 验证同源策略
         ) {
           this.sendMessage([client], "error", "Invalid Host/Origin header");
 
@@ -2690,14 +2718,17 @@ class Server {
           return;
         }
 
+        // 发送 HMR 配置,通知客户端启用热模块替换
         if (this.options.hot === true || this.options.hot === "only") {
           this.sendMessage([client], "hot");
         }
 
+        // 发送 LiveReload 配置,通知客户端启用页面自动刷新
         if (this.options.liveReload) {
           this.sendMessage([client], "liveReload");
         }
 
+        // 发送 Progress 配置,通知客户端显示编译进度
         if (
           this.options.client &&
           /** @type {ClientConfiguration} */
@@ -2711,6 +2742,7 @@ class Server {
           );
         }
 
+        // 发送 Reconnect 配置,通知客户端断线重连配置
         if (
           this.options.client &&
           /** @type {ClientConfiguration} */
@@ -2724,6 +2756,7 @@ class Server {
           );
         }
 
+        // 发送 Overlay 配置,通知客户端显示错误/警告覆盖层
         if (
           this.options.client &&
           /** @type {ClientConfiguration} */
@@ -2757,12 +2790,14 @@ class Server {
           return;
         }
 
+        // 发送初始编译状态,如果已有编译结果，立即发送给新连接的客户端
         this.sendStats([client], this.getStats(this.stats), true);
       },
     );
   }
 
   /**
+   * webpack-dev-server 中自动打开浏览器的功能实现
    * @private
    * @param {string} defaultOpenTarget
    * @returns {Promise<void>}
@@ -2778,6 +2813,7 @@ class Server {
          */
         let openTarget;
 
+        // 使用服务器完整 URL
         if (item.target === "<url>") {
           openTarget = defaultOpenTarget;
         } else {
@@ -2811,6 +2847,7 @@ class Server {
   }
 
   /**
+   * webpack-dev-server 中实现 mDNS/DNS-SD 服务广播的功能，用于在局域网中自动发现开发服务器
    * @private
    * @returns {void}
    */
@@ -3363,10 +3400,12 @@ class Server {
   }
 
   /**
-   * @param {string | string[]} watchPath
+   * webpack-dev-server 中监视静态文件变化的工具，用于实现静态资源变更时的自动刷新
+   * @param {string | string[]} watchPath 要监视的文件/目录路径
    * @param {WatchOptions} [watchOptions]
    */
   watchFiles(watchPath, watchOptions) {
+    // 使用 chokidar 创建文件监视器
     const chokidar = require("chokidar");
     const watcher = chokidar.watch(watchPath, watchOptions);
 
@@ -3374,6 +3413,7 @@ class Server {
     if (this.options.liveReload) {
       watcher.on("change", (item) => {
         if (this.webSocketServer) {
+          // 通知 WebSocket 客户端 "static-changed" 消息 
           this.sendMessage(
             this.webSocketServer.clients,
             "static-changed",
@@ -3383,6 +3423,8 @@ class Server {
       });
     }
 
+    // 将 watcher 添加到 staticWatchers 数组   
+    // 用于服务关闭时统一清理  
     this.staticWatchers.push(watcher);
   }
 
@@ -3396,16 +3438,19 @@ class Server {
   }
 
   /**
+   * 负责初始化并启动开发服务器
    * @returns {Promise<void>}
    */
   async start() {
     await this.normalizeOptions();
 
+    // IPC 模式: 检查 socket 是否被占用  
     if (this.options.ipc) {
       await /** @type {Promise<void>} */ (
         new Promise((resolve, reject) => {
+          // 创建 IPC 连接检查服务器是否已存在
           const net = require("net");
-          const socket = new net.Socket();
+          const socket = new net.Socket(); // 创建 IPC 连接
 
           socket.on(
             "error",
@@ -3439,6 +3484,7 @@ class Server {
         })
       );
     } else {
+      // TCP 模式: 获取可用主机和端口   
       this.options.host = await Server.getHostname(
         /** @type {Host} */ (this.options.host),
       );
@@ -3448,6 +3494,7 @@ class Server {
       );
     }
 
+    // 初始化服务器  
     await this.initialize();
 
     const listenOptions = this.options.ipc
@@ -3456,6 +3503,7 @@ class Server {
 
     await /** @type {Promise<void>} */ (
       new Promise((resolve) => {
+        // 启动 HTTP 服务器 (listen)  
         /** @type {S} */
         (this.server).listen(listenOptions, () => {
           resolve();
@@ -3463,6 +3511,7 @@ class Server {
       })
     );
 
+    // IPC 权限设置
     if (this.options.ipc) {
       // chmod 666 (rw rw rw)
       const READ_WRITE = 438;
@@ -3473,16 +3522,20 @@ class Server {
       );
     }
 
+    // 创建 WebSocket 服务器
     if (this.options.webSocketServer) {
       this.createWebSocketServer();
     }
 
+    // 启动 Bonjour 广播 
     if (this.options.bonjour) {
       this.runBonjour();
     }
 
+    // 记录服务器状态 
     await this.logStatus();
 
+    // 调用 onListening 回调   
     if (typeof this.options.onListening === "function") {
       this.options.onListening(this);
     }

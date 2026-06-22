@@ -250,15 +250,21 @@ const overlay =
     : { send: () => {} };
 
 /**
- * @param {Options} options
- * @param {Status} currentStatus
+ * webpack-dev-server 客户端中负责页面刷新/热更新的核心函数
+ * @param {Options} options hot 是否启用 HMR, 是否启用 LiveReload
+ * @param {Status} currentStatus 编译状态对象
  */
 const reloadApp = ({ hot, liveReload }, currentStatus) => {
+  // 检查是否正在卸载页面
+  // 如果页面正在被卸载（如导航到其他页面），直接返回，避免不必要的刷新。
   if (currentStatus.isUnloading) {
     return;
   }
 
   const { currentHash, previousHash } = currentStatus;
+
+  // 检查是否为首次加载  
+  // 次加载，不执行刷新
   const isInitial =
     currentHash.indexOf(/** @type {string} */ (previousHash)) >= 0;
 
@@ -275,37 +281,47 @@ const reloadApp = ({ hot, liveReload }, currentStatus) => {
 
     log.info("App updated. Reloading...");
 
-    rootWindow.location.reload();
+    rootWindow.location.reload(); // 加载当前页面
   }
 
+  // 检查 URL 参数是否禁用功能 
   const search = self.location.search.toLowerCase();
+  // webpack-dev-server-hot=false → 禁用 HMR 
   const allowToHot = search.indexOf("webpack-dev-server-hot=false") === -1;
+  // webpack-dev-server-live-reload=false → 禁用 LiveReload
   const allowToLiveReload =
     search.indexOf("webpack-dev-server-live-reload=false") === -1;
 
+    // HMR 模式 (不刷新页面)   
   if (hot && allowToHot) {
     log.info("App hot update...");
 
+    // 事件发射：通过 hotEmitter 发送 webpackHotUpdate 事件
     hotEmitter.emit("webpackHotUpdate", currentStatus.currentHash);
 
+    // 跨窗口通信：通过 postMessage 向所有窗口广播
     if (typeof self !== "undefined" && self.window) {
       // broadcast update to window
       self.postMessage(`webpackHotUpdate${currentStatus.currentHash}`, "*");
     }
   }
   // allow refreshing the page only if liveReload isn't disabled
+  // 页面刷新
   else if (liveReload && allowToLiveReload) {
     let rootWindow = self;
 
     // use parent window for reload (in case we're in an iframe with no valid src)
+    // 向上查找有效的父窗口
     const intervalId = self.setInterval(() => {
       if (rootWindow.location.protocol !== "about:") {
         // reload immediately if protocol is valid
+        // 立即刷新
         applyReload(rootWindow, intervalId);
       } else {
         rootWindow = rootWindow.parent;
 
         if (rootWindow.parent === rootWindow) {
+          // 防止无限循环
           // if parent equals current window we've reached the root which would continue forever, so trigger a reload anyways
           applyReload(rootWindow, intervalId);
         }
