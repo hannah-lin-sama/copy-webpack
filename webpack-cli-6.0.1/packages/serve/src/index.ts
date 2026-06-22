@@ -6,10 +6,14 @@ const WEBPACK_DEV_SERVER_PACKAGE = process.env.WEBPACK_DEV_SERVER_PACKAGE || "we
 
 type Problem = NonNullable<ReturnType<(typeof cli)["processArguments"]>>[0];
 
+/**
+ * 启动 webpack-dev-server 进行开发时的热重载服务
+ */
 class ServeCommand {
   async apply(cli: IWebpackCLI): Promise<void> {
     const loadDevServerOptions = () => {
       const devServer = require(WEBPACK_DEV_SERVER_PACKAGE);
+      // 从 webpack-dev-server 的 JSON schema 中提取所有 devServer 配置选项
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const options: Record<string, any> = cli.webpack.cli.getArguments(devServer.schema);
       // New options format
@@ -21,6 +25,7 @@ class ServeCommand {
       });
     };
 
+    // 命令配置，注册 serve 命令    
     await cli.makeCommand(
       {
         name: "serve [entries...]",
@@ -30,6 +35,7 @@ class ServeCommand {
         pkg: "@webpack-cli/serve",
         dependencies: [WEBPACK_PACKAGE, WEBPACK_DEV_SERVER_PACKAGE],
       },
+      // 回调1: 获取选项 
       async () => {
         let devServerFlags = [];
 
@@ -48,35 +54,48 @@ class ServeCommand {
 
         return [...builtInOptions, ...devServerFlags];
       },
+      // 回调2: 执行服务
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async (entries: string[], options: any) => {
+
+        // 获取内置的 webpack 配置选项和 devServer 配置选项
+        // webpack 内置选项（mode, entry, output 等）
         const builtInOptions = cli.getBuiltInOptions();
         let devServerFlags = [];
 
         try {
+          // devServer 选项（port, hot, live-reload 等）
           devServerFlags = loadDevServerOptions();
         } catch (_err) {
           // Nothing, to prevent future updates
         }
 
+        // 创建分离容器
+        // webpack 构建相关的 CLI 选项
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const webpackCLIOptions: Record<string, any> = {};
+        // devServer 服务器相关的 CLI 选项
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const devServerCLIOptions: Record<string, any> = {};
 
+        // 需要特殊处理的选项处理器
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const processors: Array<(opts: Record<string, any>) => void> = [];
 
         for (const optionName in options) {
+          // 转换为 kebab-case（如 mode → mode, noDevServer → no-dev-server）
           const kebabedOption = cli.toKebabCase(optionName);
+          // 检查是否为 webpack 内置选项
           const isBuiltInOption = builtInOptions.find(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (builtInOption: any) => builtInOption.name === kebabedOption,
           );
 
+          // webpack 选项
           if (isBuiltInOption) {
             webpackCLIOptions[optionName] = options[optionName];
           } else {
+            // devServer 选项
             const needToProcess = devServerFlags.find(
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               (devServerOption: any) =>
@@ -91,10 +110,14 @@ class ServeCommand {
           }
         }
 
+        // 执行所有收集到的处理器
         for (const processor of processors) {
           processor(devServerCLIOptions);
         }
 
+        // 创建编译器
+
+        // 合并 entry 文件
         if (entries.length > 0) {
           webpackCLIOptions.entry = [...entries, ...(webpackCLIOptions.entry || [])];
         }
@@ -106,14 +129,18 @@ class ServeCommand {
 
         webpackCLIOptions.isWatchingLikeCommand = true;
 
+        // 创建编译器实例 
         const compiler = await cli.createCompiler(webpackCLIOptions);
 
         if (!compiler) {
           return;
         }
 
+        // 启动 DevServer 
+
         const servers: (typeof DevServer)[] = [];
 
+        // stdin 监听处理
         if (cli.needWatchStdin(compiler)) {
           process.stdin.on("end", () => {
             Promise.all(
@@ -127,6 +154,7 @@ class ServeCommand {
           process.stdin.resume();
         }
 
+        // 检查 webpack-dev-server 安装
         const DevServer = require(WEBPACK_DEV_SERVER_PACKAGE);
 
         try {
@@ -139,6 +167,7 @@ class ServeCommand {
           process.exit(2);
         }
 
+        // 处理多编译器配置
         const compilers = cli.isMultipleCompiler(compiler) ? compiler.compilers : [compiler];
         const possibleCompilers = compilers.filter(
           (compiler: Compiler) => compiler.options.devServer,
@@ -147,6 +176,7 @@ class ServeCommand {
           possibleCompilers.length > 0 ? possibleCompilers : [compilers[0]];
         const usedPorts: number[] = [];
 
+        // 遍历每个编译器启动服务器
         for (const compilerForDevServer of compilersForDevServer) {
           // eslint-disable-next-line @typescript-eslint/ban-ts-comment
           // @ts-ignore
@@ -227,10 +257,13 @@ class ServeCommand {
           }
 
           try {
+            // 实例化并启动 webpack-dev-server
             const server = new DevServer(devServerOptions, compiler);
 
+            // 启动 webpack-dev-server
             await server.start();
 
+            // 存储启动的 webpack-dev-server 实例
             servers.push(server);
           } catch (error) {
             if (cli.isValidationError(error as Error)) {

@@ -1090,6 +1090,7 @@ class WebpackCLI implements IWebpackCLI {
   }
 
   async run(args: Parameters<WebpackCLICommand["parseOptions"]>[0], parseOptions: ParseOptions) {
+    // 内置命令
     // Built-in internal commands
     const buildCommandOptions = {
       name: "build [entries...]",
@@ -1117,6 +1118,7 @@ class WebpackCLI implements IWebpackCLI {
       alias: "h",
       description: "Display help for commands and options.",
     };
+    // 外部命令
     // Built-in external commands
     const externalBuiltInCommandsInfo: WebpackCLIExternalCommandInfo[] = [
       {
@@ -1180,11 +1182,19 @@ class WebpackCLI implements IWebpackCLI {
       value === "-h" ||
       value === "--help";
 
+      /**
+       * 动态加载和注册命令
+       * @param commandName 要加载的命令名称（如 "build", "serve", "configtest"）
+       * @param allowToInstall 是否允许安装依赖
+       * @returns 
+       */
     const loadCommandByName = async (
       commandName: WebpackCLIExternalCommandInfo["name"],
       allowToInstall = false,
     ) => {
+      // build 命令   
       const isBuildCommandUsed = isCommand(commandName, buildCommandOptions);
+      // watch 命令
       const isWatchCommandUsed = isCommand(commandName, watchCommandOptions);
 
       if (isBuildCommandUsed || isWatchCommandUsed) {
@@ -1203,9 +1213,12 @@ class WebpackCLI implements IWebpackCLI {
             await this.runWebpack(options, isWatchCommandUsed);
           },
         );
+        //  help 命令 
       } else if (isCommand(commandName, helpCommandOptions)) {
         // Stub for the `help` command
         this.makeCommand(helpCommandOptions, [], () => {});
+
+        //  version 命令 
       } else if (isCommand(commandName, versionCommandOptions)) {
         // Stub for the `version` command
         this.makeCommand(
@@ -1218,6 +1231,9 @@ class WebpackCLI implements IWebpackCLI {
           },
         );
       } else {
+        // 外部命令 (serve/info/configtest/自定义) 
+
+        // 查找内置外部命令配置
         const builtInExternalCommandInfo = externalBuiltInCommandsInfo.find(
           (externalBuiltInCommandInfo) =>
             getCommandName(externalBuiltInCommandInfo.name) === commandName ||
@@ -1226,6 +1242,7 @@ class WebpackCLI implements IWebpackCLI {
               : externalBuiltInCommandInfo.alias === commandName),
         );
 
+        // 确定要加载的包名
         let pkg: string;
 
         if (builtInExternalCommandInfo) {
@@ -1234,11 +1251,13 @@ class WebpackCLI implements IWebpackCLI {
           pkg = commandName;
         }
 
+        // 检查包是否存在
         if (pkg !== "webpack-cli" && !this.checkPackageExists(pkg)) {
           if (!allowToInstall) {
             return;
           }
 
+          // 动态安装
           pkg = await this.doInstall(pkg, {
             preMessage: () => {
               this.logger.error(
@@ -1250,6 +1269,7 @@ class WebpackCLI implements IWebpackCLI {
 
         let loadedCommand;
 
+        // 导入命令模块
         try {
           loadedCommand = await this.tryRequireThenImport<Instantiable<() => void>>(pkg, false);
         } catch (_err) {
@@ -1261,6 +1281,7 @@ class WebpackCLI implements IWebpackCLI {
         let command;
 
         try {
+          // 实例化并应用
           command = new loadedCommand();
 
           await command.apply(this);
@@ -1751,6 +1772,7 @@ class WebpackCLI implements IWebpackCLI {
       let commandOperands = operands.slice(1);
 
       if (isKnownCommand(commandToRun)) {
+        // 加载命令
         await loadCommandByName(commandToRun, true);
       } else {
         const isEntrySyntax = fs.existsSync(operand);
